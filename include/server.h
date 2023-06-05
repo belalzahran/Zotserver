@@ -59,12 +59,6 @@ sem_t statsMutex;  // Global Variable
 
 // INSERT FUNCTIONS HERE
 
-
-
-
-
-
-
 // void handler(int sig)
 // {
 //     pid_t pid;
@@ -88,58 +82,6 @@ sem_t statsMutex;  // Global Variable
 // }
 
 
-
-void readInPollInfo(char* poll_filename)
-{
-     FILE *pollFile;
-    pollFile = fopen(poll_filename, "r");
-
-    if (pollFile == NULL) 
-    {
-        printf("Error opening the file.\n");
-        exit(1); // Exit the program with an error code
-    }
-
-    char buffer[1024];
-    int pollArrayIndex = 0;
-    int numOfChoices,choiceNum,voteCount = 0;
-    
-
-    while((fgets(buffer, 1024, pollFile)))
-    {
-        //printf("string: %s\n",buffer);
-
-        buffer[strcspn(buffer, "\n")] = '\0';
-        char *question = malloc(sizeof(char) * 100);
-        getQuestion(buffer, question, &numOfChoices);
-        pollArray[pollArrayIndex].question = question;
-
-        printf("The question: %s\n",question);
-        printf("The num Of choices: %d\n",numOfChoices);
-
-        for(int i = 0; i < 4; i++) 
-        {
-            if (i >= numOfChoices) {
-                pollArray[pollArrayIndex].options[i].text = NULL;
-                continue;
-            }
-            else
-            {
-                char *choiceString = malloc(sizeof(char) * 50);
-                int voteCount;
-                getChoiceStringAndVoteCnt(buffer, numOfChoices, i, choiceString, &voteCount);
-                printf("choice string is: %s, and voteCount is: %d\n", choiceString,voteCount);
-
-                pollArray[pollArrayIndex].options[i].text = choiceString;
-                pollArray[pollArrayIndex].options[i].voteCnt = voteCount;
-            }
-
-            
-        }
-
-        pollArrayIndex++;
-    }
-}
 
 void getQuestion(char *buffer, char* question, int *numOfChoices)
 {
@@ -194,6 +136,52 @@ void getChoiceStringAndVoteCnt(char *buffer, int numOfChoices, int choiceNum, ch
 
     // convert the part after the comma to an integer
     *voteCount = atoi(commaPos + 1);
+}
+
+
+
+void readInPollInfo(FILE *pollFile)
+{
+
+    char buffer[1024];
+    int pollArrayIndex = 0;
+    int numOfChoices,choiceNum,voteCount = 0;
+    
+
+    while((fgets(buffer, 1024, pollFile)))
+    {
+        //printf("string: %s\n",buffer);
+
+        buffer[strcspn(buffer, "\n")] = '\0';
+        char *question = malloc(sizeof(char) * 100);
+        getQuestion(buffer, question, &numOfChoices);
+        pollArray[pollArrayIndex].question = question;
+
+        printf("The question: %s\n",question);
+        printf("The num Of choices: %d\n",numOfChoices);
+
+        for(int i = 0; i < 4; i++) 
+        {
+            if (i >= numOfChoices) {
+                pollArray[pollArrayIndex].options[i].text = NULL;
+                continue;
+            }
+            else
+            {
+                char *choiceString = malloc(sizeof(char) * 50);
+                int voteCount;
+                getChoiceStringAndVoteCnt(buffer, numOfChoices, i, choiceString, &voteCount);
+                printf("choice string is: %s, and voteCount is: %d\n", choiceString,voteCount);
+
+                pollArray[pollArrayIndex].options[i].text = choiceString;
+                pollArray[pollArrayIndex].options[i].voteCnt = voteCount;
+            }
+
+            
+        }
+
+        pollArrayIndex++;
+    }
 }
 
 

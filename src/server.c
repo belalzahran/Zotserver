@@ -27,10 +27,10 @@ int main(int argc, char *argv[]) {
     char * log_filename = argv[3];
 
 
-    // Creating the listening Socket for the Server
+    // Creating the listening Socket for the Server //////////////////////////
     open_listenfd(port_number);
 
-    // Initializing the Poll statistics struct 
+    // Initializing the Poll statistics struct //////////////////////////
     stats_t serverStats;
     serverStats.clientCnt = 0;
     serverStats.threadCnt = 0;
@@ -38,8 +38,27 @@ int main(int argc, char *argv[]) {
     serverStatsPtr =&serverStats;
     Sem_init(&statsMutex,0, 1);
 
-    // reading in the Polls data
-    readInPollInfo(poll_filename);
+    // reading in the Polls data  //////////////////////////
+    FILE *pollFile;
+    pollFile = fopen(poll_filename, "r");
+    if (pollFile == NULL) 
+    {
+        printf("Error opening the file.\n");
+        exit(2); // Exit the program with an error code
+    }
+    readInPollInfo(pollFile);
+
+    // opening LOG_FILENAME //////////////////////////
+
+    FILE *logFile;
+    logFile = fopen(log_filename, "w");
+    if (logFile == NULL) 
+    {
+        printf("Error opening the file.\n");
+        exit(2); // Exit the program with an error code
+    }
+
+    
 
 
 
