@@ -5,6 +5,8 @@
 #include <signal.h>
 
 
+
+
 int main(int argc, char *argv[]) {
     int opt;
     while ((opt = getopt(argc, argv, "h")) != -1) {
@@ -24,12 +26,24 @@ int main(int argc, char *argv[]) {
     char * poll_filename = argv[2];
     char * log_filename = argv[3];
 
+
+    // Creating the listening Socket for the Server
     open_listenfd(port_number);
 
+    // Initializing the Poll statistics struct 
     stats_t serverStats;
     serverStats.clientCnt = 0;
     serverStats.threadCnt = 0;
     serverStats.totalVotes = 0;
+    serverStatsPtr =&serverStats;
+    Sem_init(&statsMutex,0, 1);
+
+    // reading in the Polls data
+    readInPollInfo(poll_filename);
+
+
+
+    
 
     //INSERT CODE HERE
 
