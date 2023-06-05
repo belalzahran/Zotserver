@@ -1,5 +1,0 @@
-./bin/zoteVote_server [-h] PORT_NUMBER POLL_FILENAME LOG_FILENAME
-  -h                 Displays this help menu and returns EXIT_SUCCESS.
-  PORT_NUMBER        Port number to listen on.
-  POLL_FILENAME      File to read poll information from at the start of the server
-  LOG_FILENAME       File to output server actions into. Create/overwrite, if exists

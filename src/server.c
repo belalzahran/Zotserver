@@ -1,8 +1,9 @@
 #include "server.h"
 #include "protocol.h"
 #include "helpers.h"
-#include <pthread.h>
-#include <signal.h>
+#include "pollarray.h"
+#include "linkedlist.h"
+
 
 
 
@@ -29,14 +30,13 @@ int main(int argc, char *argv[]) {
 
     // Creating the listening Socket for the Server //////////////////////////
     open_listenfd(port_number);
+    
 
     // Initializing the Poll statistics struct //////////////////////////
-    stats_t serverStats;
-    serverStats.clientCnt = 0;
-    serverStats.threadCnt = 0;
-    serverStats.totalVotes = 0;
-    serverStatsPtr =&serverStats;
-    Sem_init(&statsMutex,0, 1);
+    curStats.clientCnt = 0;
+    curStats.threadCnt = 0;
+    curStats.totalVotes = 0;
+    serverStatsPtr =&curStats;
 
     // reading in the Polls data  //////////////////////////
     FILE *pollFile;
@@ -58,9 +58,38 @@ int main(int argc, char *argv[]) {
         exit(2); // Exit the program with an error code
     }
 
-    
+    // Initializing the linked list for the clients/users //////////////////////////
 
+    user_t* users = NULL;
+    userListHead = users;
 
+    // Create and initialize synchronization locks
+
+    Sem_init(&curStatsMutex,0, 1);
+
+    Sem_init(&userMutexRead,0,1);
+    Sem_init(&userMutexWrite,0,1);
+    userListReadCount = 0;
+
+    Sem_init(&pollArrayMutex,0,1);
+
+    Sem_init(&votingLogMutex,0,1);
+
+    // INSTALLING THE SIGNAL AHNDER FOR SIGINT
+
+    struct sigaction myaction = {0};
+    myaction.sa_handler = sigint_handler;
+    if (sigaction(SIGINT, &myaction, NULL) == -1) 
+    {
+        printf("Signal handler failed to install.\n");
+    }
+
+    printf("Server initialized with %d polls.\n", numOfPolls);
+    printf("Currently listening on port %d.\n",port_number);
+    // *************************************************************************************************************************************************
+    // FINISHED SERVER INITIALIZATION
+    // *************************************************************************************************************************************************
+    sleep(10);
 
     
 
