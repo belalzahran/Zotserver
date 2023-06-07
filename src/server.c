@@ -28,30 +28,43 @@ void *workerThread(void *vargp)
         }
 
 
-    //    1 - check to see if user exists -> add to linked list
-        if (!userExists(msgBody))
+        switch(userExists(msgBody))
         {
-            insertUser(msgBody,connfd,getpid(),0);
-            fprintf(logFile,"CONNECTED %s\n",msgBody);
-            updateCurrentStats(1,1,0);
-            receivedHeader->msg_type = 0x00;
-            memset(msgBody, 0, receivedHeader->msg_len);
-        }
-        else if(userExists(msgBody))
-        {
-            updateUser(msgBody,connfd,getpid(),0);
-            fprintf(logFile,"RECONNECTED %s\n",msgBody);
-            updateCurrentStats(1,1,0);
-        }
-        else
-        {
-            //unsuccesful log in
-            fprintf(logFile,"REJECT %s\n",msgBody);
-            updateCurrentStats(1,0,0);
-            close(connfd);
-            exit(1);
-        }
+            case 0: 
+                // VALID SYNTAX AND NEW USER
+                insertUser(msgBody,connfd,getpid(),0);
+                fprintf(logFile,"CONNECTED %s\n",msgBody);
+                updateCurrentStats(1,1,0);
+                receivedHeader->msg_type = 0x00;
+                memset(msgBody, 0, receivedHeader->msg_len);
+                break;
 
+            case 1: 
+                // user name exists and is inactive
+                updateUser(msgBody,connfd,getpid(),0);
+                fprintf(logFile,"RECONNECTED %s\n",msgBody);
+                updateCurrentStats(1,1,0);
+                receivedHeader->msg_type = 0x00;
+                memset(msgBody, 0, receivedHeader->msg_len);
+                break;
+
+            case 2: 
+                 // user name exists and active: ERROR
+                fprintf(logFile,"REJECT %s\n",msgBody);
+                receivedHeader->msg_type = 0xF0;
+                if (wr_msg(connfd, receivedHeader, msgBody) < 0)
+                {
+                    printf("Sending failed\n");
+                    free(msgBody);;
+                }
+                close(connfd);
+                exit(1);
+                break;
+
+            default: 
+                printf("USER Exists error\n");
+        }
+  
         printUserList();
 
 
@@ -61,7 +74,7 @@ void *workerThread(void *vargp)
             free(msgBody);
             break;
         }
-        sleep(10);
+
         printf("end of loop\n");
 
         free(msgBody);
@@ -131,7 +144,7 @@ int main(int argc, char *argv[]) {
 
     Sem_init(&curStatsMutex,0, 1);
 
-    Sem_init(&userMutexRead,0,1);
+    Sem_init(&userMutex,0,1);
     Sem_init(&userMutexWrite,0,1);
     userListReadCount = 0;
 

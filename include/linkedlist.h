@@ -15,20 +15,8 @@ typedef struct user_t{
 } user_t;
 
 user_t* userListHead = NULL;
-sem_t userMutexRead, userMutexWrite;
+sem_t userMutex, userMutexWrite;
 int userListReadCount;
-
-user_t* createUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes) {
-    user_t* newUser = (user_t*)malloc(sizeof(user_t));
-    newUser->username = strdup(username); // Create a copy of the username
-    newUser->socket_fd = socket_fd;
-    newUser->tid = tid;
-    newUser->pollVotes = pollVotes;
-    newUser->next = NULL;
-    return newUser;
-}
-
-
 
 
 
@@ -91,52 +79,68 @@ void removeUser(char* username) {
     V(&userMutexWrite);
 }
 
+// 0 - does not exist
+// 1 - exists and is not active -1
+// 2 - exists and is active ERROR
 int userExists(char* keyName)
 {
-    P(&userMutexRead);
+    int result = 0;
+
+    P(&userMutex);
     userListReadCount++;
 
     if(userListReadCount == 1)
         P(&userMutexWrite);
 
-    V(&userMutexRead);
+    V(&userMutex);
 
     user_t* ptr = userListHead;
-    while (ptr != NULL) {
-        if (strcmp(ptr->username, keyName) == 0) { // If the user exists
-            P(&userMutexRead);
+    while (ptr != NULL) 
+    {
+        if (strcmp(ptr->username, keyName) == 0)
+        { // If the user exists
+            if(ptr->socket_fd == -1)
+            {
+                result = 1;
+            }
+            else
+            {
+                result = 2;
+            }
+
+            P(&userMutex);
             userListReadCount--;
 
             if(userListReadCount == 0)
                 V(&userMutexWrite);
 
-            V(&userMutexRead);
+            V(&userMutex);
 
-            return 1;
+            return result;
         }
         ptr = ptr->next;
     }
 
-    P(&userMutexRead);
+    P(&userMutex);
     userListReadCount--;
 
     if(userListReadCount == 0)
         V(&userMutexWrite);
 
-    V(&userMutexRead);
+    V(&userMutex);
 
     return 0; // If the user does not exist
 }
 
 void printUserList() 
 {
-    P(&userMutexRead);
+    P(&userMutex);
     userListReadCount++;
 
     if(userListReadCount == 1)
         P(&userMutexWrite);
 
-    V(&userMutexRead);
+    V(&userMutex);
     
     user_t* ptr = userListHead;
     while (ptr != NULL) {
@@ -144,15 +148,17 @@ void printUserList()
         ptr = ptr->next;
     }
 
-    P(&userMutexRead);
+    P(&userMutex);
     userListReadCount--;
 
     if(userListReadCount == 0)
         V(&userMutexWrite);
 
-    V(&userMutexRead);
+    V(&userMutex);
 
 }
+
+
 
 #endif
 
