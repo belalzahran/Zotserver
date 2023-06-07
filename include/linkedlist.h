@@ -28,16 +28,107 @@ user_t* createUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVo
     return newUser;
 }
 
-void insertUser(user_t** head, char* username, int socket_fd, pthread_t tid, uint32_t pollVotes)
+
+
+
+
+void insertUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes)
 {
     P(&userMutexWrite);
-    user_t* newUser = createUser(username, socket_fd, tid, pollVotes);
-    newUser->next = *head;
-    *head = newUser;
+    user_t* newUser = (user_t*)malloc(sizeof(user_t));
+    newUser->username = strdup(username); // Create a copy of the username
+    newUser->socket_fd = socket_fd;
+    newUser->tid = tid;
+    newUser->pollVotes = pollVotes;
+    newUser->next = userListHead;
+    userListHead = newUser;
     V(&userMutexWrite);
 }
 
-void printUserList(user_t* head) 
+void updateUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes) 
+{
+    P(&userMutexWrite);
+
+    user_t* ptr = userListHead;
+    while(ptr != NULL) 
+    {
+        if(strcmp(ptr->username, username) == 0) 
+        {
+            ptr->socket_fd = socket_fd;
+            ptr->tid = tid;
+            ptr->pollVotes = pollVotes;
+            break;
+        }
+        ptr = ptr->next;
+    }
+
+    V(&userMutexWrite);
+}
+
+void removeUser(char* username) {
+
+    if (userListHead == NULL) return;
+
+    P(&userMutexWrite);
+    if (strcmp(userListHead->username, username) == 0) {
+        user_t* temp = userListHead;
+        userListHead = userListHead->next;
+        free(temp->username);
+        free(temp);
+        V(&userMutexWrite);
+        return;
+    }
+    user_t* current = userListHead;
+    while (current->next != NULL && strcmp(current->next->username, username) != 0) {
+        current = current->next;
+    }
+    if (current->next != NULL) {
+        user_t* temp = current->next;
+        current->next = current->next->next;
+        free(temp->username);
+        free(temp);
+    }
+    V(&userMutexWrite);
+}
+
+int userExists(char* keyName)
+{
+    P(&userMutexRead);
+    userListReadCount++;
+
+    if(userListReadCount == 1)
+        P(&userMutexWrite);
+
+    V(&userMutexRead);
+
+    user_t* ptr = userListHead;
+    while (ptr != NULL) {
+        if (strcmp(ptr->username, keyName) == 0) { // If the user exists
+            P(&userMutexRead);
+            userListReadCount--;
+
+            if(userListReadCount == 0)
+                V(&userMutexWrite);
+
+            V(&userMutexRead);
+
+            return 1;
+        }
+        ptr = ptr->next;
+    }
+
+    P(&userMutexRead);
+    userListReadCount--;
+
+    if(userListReadCount == 0)
+        V(&userMutexWrite);
+
+    V(&userMutexRead);
+
+    return 0; // If the user does not exist
+}
+
+void printUserList() 
 {
     P(&userMutexRead);
     userListReadCount++;
@@ -47,7 +138,7 @@ void printUserList(user_t* head)
 
     V(&userMutexRead);
     
-    user_t* ptr = head;
+    user_t* ptr = userListHead;
     while (ptr != NULL) {
         printf("Username: %s, Socket_fd: %d, Thread_id: %ld, PollVotes: %u\n", ptr->username, ptr->socket_fd, (long)ptr->tid, ptr->pollVotes);
         ptr = ptr->next;
@@ -62,35 +153,6 @@ void printUserList(user_t* head)
     V(&userMutexRead);
 
 }
-
-void removeUser(user_t** head, char* username) {
-
-    if (*head == NULL) return;
-
-    P(&userMutexWrite);
-    if (strcmp((*head)->username, username) == 0) {
-        user_t* temp = *head;
-        *head = (*head)->next;
-        free(temp->username);
-        free(temp);
-        return;
-    }
-    user_t* current = *head;
-    while (current->next != NULL && strcmp(current->next->username, username) != 0) {
-        current = current->next;
-    }
-    if (current->next != NULL) {
-        user_t* temp = current->next;
-        current->next = current->next->next;
-        free(temp->username);
-        free(temp);
-    }
-    V(&userMutexWrite);
-}
-
-
-
-
 
 #endif
 

@@ -118,15 +118,19 @@ void readInPollInfo(FILE *pollFile)
 
                 pollArray[pollArrayIndex].options[i].text = choiceString;
                 pollArray[pollArrayIndex].options[i].voteCnt = voteCount;
+
+                free(choiceString);
             }
 
             
         }
 
         pollArrayIndex++;
+        free(question);
 
     }
     numOfPolls = pollArrayIndex;
+
 }
 
 

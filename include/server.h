@@ -17,6 +17,7 @@
 #include "helpers.h"
 #include "protocol.h"
 #include "pollarray.h"
+#include <stdbool.h>
 
 
 
@@ -33,13 +34,27 @@ typedef struct {
 } stats_t;   // Stats collected since server start-up
 
 
-
 stats_t curStats;  // Global variable
-stats_t* serverStatsPtr; // Global Variables
 sem_t curStatsMutex;  // Global Variable
+
+void updateCurrentStats(int addclientCnt, int addthreadCnt, int addtotalVotes)
+{
+    P(&curStatsMutex);
+    curStats.clientCnt += addclientCnt;
+    curStats.threadCnt += addthreadCnt;
+    curStats.totalVotes += addtotalVotes;
+    V(&curStatsMutex);
+}
+
+
+
+
+
+FILE *logFile;
 sem_t votingLogMutex;
 volatile sig_atomic_t sigint_recieved = 0;
 
+int maxNumOfThreads = 3;
 
 
 
@@ -60,18 +75,6 @@ void sigint_handler(int sig_num)
 //     return;
 //  }
 
-// // funciton that will run when working thread is called with file descriptor
-// void *thread(void *vargp)
-// {
-//     int connfd = *((int *)vargp);
-    
-//     Pthread_detach(pthread_self());
-//     free(vargp);
-    
-//     //echo_r(connfd); /* reentrant version of echo() */
-//     Close(connfd);
-//     return NULL;
-// }
 
 
 

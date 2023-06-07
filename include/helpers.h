@@ -197,6 +197,7 @@ void Close(int fd)
  {
     if (sem_init(sem, pshared, value) < 0)
         unix_error("Sem_init error");
+
  }
 
  void P(sem_t *sem)

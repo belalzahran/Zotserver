@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Iinclude -Wall -Werror -g -Wno-unused
+CFLAGS=-Iinclude -Wall -Werror -g -Wno-unused -Wno-deprecated-declarations
 
 SSRC=$(shell find src -name '*.c')
 DEPS=$(shell find include -name '*.h')
@@ -18,4 +18,4 @@ server: setup
 .PHONY: clean
 
 clean:
-	rm -rf bin 
+	rm -rf bin
