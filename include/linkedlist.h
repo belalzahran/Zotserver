@@ -36,15 +36,16 @@ void insertUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes
 void updateUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes) 
 {
     P(&userMutexWrite);
+    printf("Updating %s's info...\n",username);
 
     user_t* ptr = userListHead;
     while(ptr != NULL) 
     {
         if(strcmp(ptr->username, username) == 0) 
         {
-            ptr->socket_fd = socket_fd;
-            ptr->tid = tid;
-            ptr->pollVotes = pollVotes;
+            if (socket_fd != 1) ptr->socket_fd = socket_fd;
+            if (tid != (pthread_t)-1) ptr->tid = tid;
+            if (pollVotes != (uint32_t)-1) ptr->pollVotes = pollVotes;
             break;
         }
         ptr = ptr->next;

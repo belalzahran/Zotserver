@@ -52,6 +52,7 @@ char* GetMessage(int socket_fd, petrV_header* h)
     {
         printf("\tReceiving message body failed\n");
         free(msgBody);
+        close(socket_fd);  // Add this line to close the connection if receiving message body fails
         return NULL;
     }
 
@@ -60,5 +61,56 @@ char* GetMessage(int socket_fd, petrV_header* h)
 
     return msgBody;
 }
+
+int authorizeUser(petrV_header *receivedHeader, char * msgBody, int connfd, pthread_t tid) 
+{
+
+    switch(userExists(msgBody))
+    {
+        case 0: 
+            // VALID SYNTAX AND NEW USER
+            insertUser(msgBody,connfd,tid,0);
+            fprintf(logFile,"CONNECTED %s\n",msgBody);
+            updateCurrentStats(1,1,0);
+            receivedHeader->msg_type = 0x00;
+            receivedHeader->msg_len = 0; // No body content
+            break;
+
+        case 1: 
+            // user name exists and is inactive
+            updateUser(msgBody,connfd,tid,0);
+            fprintf(logFile,"RECONNECTED %s\n",msgBody);
+            updateCurrentStats(1,1,0);
+            receivedHeader->msg_type = 0x00;
+            receivedHeader->msg_len = 0; // No body content
+            break;
+
+        case 2: 
+            // user name exists and active: ERROR
+            fprintf(logFile,"REJECT %s\n",msgBody);
+            receivedHeader->msg_type = EUSRLGDIN;
+            receivedHeader->msg_len = 0; // No body content
+            if (wr_msg(connfd, receivedHeader, NULL) < 0)
+            {
+                printf("Sending failed\n");
+                free(msgBody);;
+            }
+            close(connfd);
+            return -1;
+        default: 
+            printf("USER Exists error\n");
+    }
+
+    if (wr_msg(connfd, receivedHeader, NULL) < 0) // Pass NULL for msgBody
+    {
+        printf("Sending failed\n");
+        free(msgBody);
+    }
+
+    return 0;
+
+}
+
+
 
 #endif

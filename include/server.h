@@ -52,7 +52,7 @@ void updateCurrentStats(int addclientCnt, int addthreadCnt, int addtotalVotes)
 
 FILE *logFile;
 sem_t votingLogMutex;
-volatile sig_atomic_t sigint_recieved = 0;
+volatile sig_atomic_t sigint_received = 0;
 
 int maxNumOfThreads = 3;
 
@@ -61,19 +61,53 @@ int maxNumOfThreads = 3;
 
 
 // INSERT FUNCTIONS HERE
+void handle_SIGINT() {
+   
 
-void sigint_handler(int sig_num)
-{
-    sigint_recieved = 1;
+    // Lock the mutex before accessing the user list
+    P(&userMutex);
+    userListReadCount++;
+
+    if(userListReadCount == 1)
+        P(&userMutexWrite);
+
+    V(&userMutex);
+
+    // Iterate over each client
+    user_t* ptr = userListHead;
+    while (ptr != NULL) {
+        // Send SIGINT to the thread handling this client
+        pthread_kill(ptr->tid, SIGINT);
+        
+        // Close the client socket
+        close(ptr->socket_fd);
+
+        // Wait for this thread to terminate
+        pthread_join(ptr->tid, NULL);
+
+        // Move to the next client
+        ptr = ptr->next;
+    }
+
+    // Unlock the mutex
+    P(&userMutex);
+    userListReadCount--;
+
+    if(userListReadCount == 0)
+        V(&userMutexWrite);
+
+    V(&userMutex);
+
+    // ADD CODE TO OUTPUT THE STATES OF THE POLLS TO FILE
+
+    // OUTPUT the user linked list info to STDERR
+
+    // output curSTTATS values to STDERRR 
+
+    // Exit the process
+    printf("Signal has been handled. Terminating...\n");
+    exit(0);
 }
-// void sigint_handler(int sig_num)  // THIS IS THE THREAD RAPER
-// {
-//     pid_t pid;
-//     int stat;
-//     while ((pid = waitpid(-1, &stat, WNOHANG)) > 0);
-
-//     return;
-//  }
 
 
 

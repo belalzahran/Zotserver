@@ -12,11 +12,18 @@ void *workerThread(void *vargp)
 {
     pthread_detach(pthread_self());
     petrV_header *receivedHeader = malloc(sizeof(petrV_header)); 
+    char *username;
     //petrV_header *sendingHeader = malloc(sizeof(petrV_header)); 
 
     while(1)
     {
+        char userName[25];
         int connfd = sbuf_remove();
+        if (sigint_received) {
+            // Handle SIGINT: clean up and exit
+            close(connfd);
+            pthread_exit(NULL);
+        }
         //printf("\tconnfd from the buff remove: %d\n", connfd);
         //printf("\tWorker thread began processing pending client connection from the buffer...\n");
         char* msgBody = GetMessage(connfd, receivedHeader);
@@ -27,55 +34,56 @@ void *workerThread(void *vargp)
             break;
         }
 
-
-        switch(userExists(msgBody))
+        if (authorizeUser(receivedHeader, msgBody, connfd, pthread_self()) < 0)
         {
-            case 0: 
-                // VALID SYNTAX AND NEW USER
-                insertUser(msgBody,connfd,getpid(),0);
-                fprintf(logFile,"CONNECTED %s\n",msgBody);
-                updateCurrentStats(1,1,0);
-                receivedHeader->msg_type = 0x00;
-                memset(msgBody, 0, receivedHeader->msg_len);
-                break;
-
-            case 1: 
-                // user name exists and is inactive
-                updateUser(msgBody,connfd,getpid(),0);
-                fprintf(logFile,"RECONNECTED %s\n",msgBody);
-                updateCurrentStats(1,1,0);
-                receivedHeader->msg_type = 0x00;
-                memset(msgBody, 0, receivedHeader->msg_len);
-                break;
-
-            case 2: 
-                 // user name exists and active: ERROR
-                fprintf(logFile,"REJECT %s\n",msgBody);
-                receivedHeader->msg_type = 0xF0;
-                if (wr_msg(connfd, receivedHeader, msgBody) < 0)
-                {
-                    printf("Sending failed\n");
-                    free(msgBody);;
-                }
-                close(connfd);
-                exit(1);
-                break;
-
-            default: 
-                printf("USER Exists error\n");
+            continue;
         }
-  
+        
+
         printUserList();
+        strncpy(userName, msgBody, sizeof(userName) - 1);
+        userName[sizeof(userName) - 1] = '\0'; // Ensure null-termination
 
-
-        if (wr_msg(connfd, receivedHeader, msgBody) < 0)
+        do 
         {
-            printf("Sending failed\n");
-            free(msgBody);
-            break;
-        }
 
-        printf("end of loop\n");
+            free(msgBody);
+            msgBody = GetMessage(connfd, receivedHeader);
+
+            switch (receivedHeader->msg_type)
+            {
+                case OK:
+                case LOGIN:
+                case PLIST:
+
+                        fprintf(logFile,"%s PLIST\n", userName);
+
+
+                case STATS:
+                case VOTE:
+                    // Handle these message types as necessary
+                    break;
+                case LOGOUT:
+                    // Assume updateUser is a function that marks the user as inactive.
+                        fprintf(logFile,"%s LOGOUT\n",msgBody);
+                        updateUser(userName,-1,-1,-1);
+                        // Create an OK message header
+                        petrV_header responseHeader;
+                        responseHeader.msg_len = 0;
+                        responseHeader.msg_type = OK;
+                        // Send the OK message back to the client
+                        if (wr_msg(connfd, &responseHeader, NULL) < 0) {
+                            // Handle the error - failed to send message
+                        }
+                        break;
+                
+                default:
+                    // Unrecognized message type. You might want to add some error handling here.
+                    break;
+            }
+        } while (receivedHeader->msg_type != 0x2);
+
+        printf("no more server code to handle client\n");
 
         free(msgBody);
         close(connfd);
@@ -155,7 +163,7 @@ int main(int argc, char *argv[]) {
     // INSTALLING THE SIGNAL AHNDER FOR SIGINT
 
     struct sigaction myaction = {0};
-    myaction.sa_handler = sigint_handler;
+    myaction.sa_handler = handle_SIGINT;
     if (sigaction(SIGINT, &myaction, NULL) == -1) 
     {
         printf("Signal handler failed to install.\n");
@@ -185,19 +193,29 @@ int main(int argc, char *argv[]) {
     //printf("%d worker threads have been created.\n", maxNumOfThreads);
 
     //printf("Begin looping for new connections...\n");
-    while(1)
-    {
+    while(1) {
+
         clientlen = sizeof(struct sockaddr_storage);
-        
+
         connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
         if (connfd < 0) {
-            printf("server acccept failed.\n");
-            exit(EXIT_FAILURE);
+            if (errno == EINTR && sigint_received) 
+            {
+                close(listenfd);
+                handle_SIGINT();
+                break;
+            }
+            else
+            {
+                perror("accept");
+                continue;
+            }
         }
         printf("\naccepted a client connection.\n");
         sbuf_insert(connfd);
-
     }
- 
+
+
+    // ...
     return 0;
 }
