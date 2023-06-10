@@ -36,16 +36,32 @@ void insertUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes
 void updateUser(char* username, int socket_fd, pthread_t tid, uint32_t pollVotes) 
 {
     P(&userMutexWrite);
-    printf("Updating %s's info...\n",username);
 
+    printf("Updating %s's info...\n",username);
     user_t* ptr = userListHead;
+
     while(ptr != NULL) 
     {
         if(strcmp(ptr->username, username) == 0) 
         {
-            if (socket_fd != 1) ptr->socket_fd = socket_fd;
-            if (tid != (pthread_t)-1) ptr->tid = tid;
-            if (pollVotes != (uint32_t)-1) ptr->pollVotes = pollVotes;
+            if (socket_fd != 1)
+            {
+                ptr->socket_fd = socket_fd;
+                printf("socket_fd updated.\n");
+            }
+
+            if (tid != (pthread_t)-1)
+            {
+                ptr->tid = tid;
+                printf("thread_id updated.\n");
+            }
+
+            if (pollVotes != (uint32_t)-1)
+            {
+                ptr->pollVotes = pollVotes;
+                printf("poll votes updated.\n");
+            }
+
             break;
         }
         ptr = ptr->next;
@@ -80,11 +96,12 @@ void removeUser(char* username) {
     V(&userMutexWrite);
 }
 
-// 0 - does not exist
-// 1 - exists and is not active -1
-// 2 - exists and is active ERROR
+
 int userExists(char* keyName)
 {
+    // 0 - does not exist
+    // 1 - exists and is not active -1
+    // 2 - exists and is active ERROR
     int result = 0;
 
     P(&userMutex);
@@ -159,7 +176,6 @@ void printUserList()
 
 }
 
-
 uint32_t getPollVotesVec(char* keyName) 
 {
     P(&userMutex);
@@ -200,6 +216,31 @@ uint32_t getPollVotesVec(char* keyName)
     return 0; // If the user does not exist
 }
 
+void printUserListOnSignal() 
+{
+    P(&userMutex);
+    userListReadCount++;
+
+    if(userListReadCount == 1)
+        P(&userMutexWrite);
+
+    V(&userMutex);
+    
+    user_t* ptr = userListHead;
+    while (ptr != NULL) {
+        printf("%s, %u\n", ptr->username, ptr->pollVotes);
+        ptr = ptr->next;
+    }
+
+    P(&userMutex);
+    userListReadCount--;
+
+    if(userListReadCount == 0)
+        V(&userMutexWrite);
+
+    V(&userMutex);
+
+}
 #endif
 
 

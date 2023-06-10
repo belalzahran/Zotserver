@@ -48,21 +48,19 @@ void updateCurrentStats(int addclientCnt, int addthreadCnt, int addtotalVotes)
 
 
 
-
-
 FILE *logFile;
 sem_t votingLogMutex;
 volatile sig_atomic_t sigint_received = 0;
-
 int maxNumOfThreads = 3;
-
+pthread_t mainThreadID;
 
 
 
 
 // INSERT FUNCTIONS HERE
-void handle_SIGINT() {
-   
+void handle_SIGINT(int listenfd) {
+
+    
 
     // Lock the mutex before accessing the user list
     P(&userMutex);
@@ -73,19 +71,16 @@ void handle_SIGINT() {
 
     V(&userMutex);
 
+    close(listenfd);
+
+
     // Iterate over each client
     user_t* ptr = userListHead;
     while (ptr != NULL) {
-        // Send SIGINT to the thread handling this client
-        pthread_kill(ptr->tid, SIGINT);
-        
-        // Close the client socket
-        close(ptr->socket_fd);
-
-        // Wait for this thread to terminate
-        pthread_join(ptr->tid, NULL);
-
-        // Move to the next client
+        if (ptr->socket_fd >= 0) {
+            pthread_kill(ptr->tid, SIGINT);
+            pthread_join(ptr->tid, NULL);
+        }
         ptr = ptr->next;
     }
 
@@ -98,14 +93,19 @@ void handle_SIGINT() {
 
     V(&userMutex);
 
-    // ADD CODE TO OUTPUT THE STATES OF THE POLLS TO FILE
+   
+    //printf("Terminating worker thread...\n");
+    
 
-    // OUTPUT the user linked list info to STDERR
-
-    // output curSTTATS values to STDERRR 
-
-    // Exit the process
-    printf("Signal has been handled. Terminating...\n");
+    if (pthread_self() == mainThreadID)
+    {
+        printf("\nSignal caught and handled. Terminating Main thread...\n");
+        printPollArray();
+        printUserListOnSignal();
+        printf("Client Count: %d, Thread Count: %d, Total Votes: %d\n", curStats.clientCnt, curStats.threadCnt, curStats.totalVotes);
+    }
+        
+    
     exit(0);
 }
 

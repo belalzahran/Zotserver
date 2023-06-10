@@ -25,7 +25,8 @@ poll_t pollArray[32]; // Global variable
                       // Maximum of 32 polls on the server.
 
 
-void print_poll_array() {
+void printPollArray() 
+{
     P(&pollArrayMutex);
     for (int i = 0; i < 32; i++) {
         if (pollArray[i].question != NULL) {
@@ -43,7 +44,9 @@ void print_poll_array() {
     }
     V(&pollArrayMutex);
 }
-char* str_split(char* a_str, const char a_delim){
+
+char* str_split(char* a_str, const char a_delim)
+{
     static char* input_string;
     if(a_str != NULL)
         input_string = a_str;
@@ -115,9 +118,8 @@ void readInPollInfo(FILE *pollFile){
     numOfPolls = pollArrayIndex;
 }
 
-
-
-char* getPollString(int index){
+char* getPollString(int index)
+{
     if(index >= numOfPolls)
         return NULL;
 
@@ -152,7 +154,7 @@ char* returnCombinedPollStrings()
     combinedPolls[0] = '\0'; // make it an empty string
 
     int index = 0;
-    while(index < numOfPolls && index < 32)
+    while(index < numOfPolls && index < 32 && pollArray[index].question != NULL)
     {
         char *pollString = getPollString(index);
         if (pollString == NULL) {
@@ -176,6 +178,8 @@ char* returnCombinedPollStrings()
 
     return combinedPolls;
 }
+
+
 
 #endif
 

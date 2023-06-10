@@ -7,62 +7,64 @@
 #include "myhelpers.h"
 
 
-
 void *workerThread(void *vargp)
 {
+    // detach thread from main thread
     pthread_detach(pthread_self());
+    
+    // initialize header to process client requests
     petrV_header *receivedHeader = malloc(sizeof(petrV_header)); 
-    char *username;
-    //petrV_header *sendingHeader = malloc(sizeof(petrV_header)); 
+
+    // intialize a header to for responding to client
+    petrV_header responseHeader;  
 
     while(1)
     {
-        char userName[25];
+        // wait to obtain new client connection
         int connfd = sbuf_remove();
-        if (sigint_received) {
-            // Handle SIGINT: clean up and exit
-            close(connfd);
-            pthread_exit(NULL);
-        }
+
+        // Check for SIGINT signal
+        if (sigint_received) {close(connfd);pthread_exit(NULL);}
  
+        // get LOGIN request from user
         char* msgBody = GetMessage(connfd, receivedHeader);
+        if(msgBody == NULL){printf("\tFailed to get message from client\n");break;}
 
-        if(msgBody == NULL)
-        {
-            printf("\tFailed to get message from client\n");
-            break;
-        }
+        // authorize user -  If LOGIN fails, close connection
+        if (authorizeUser(receivedHeader, msgBody, connfd, pthread_self()) < 0){continue;}
 
-        if (authorizeUser(receivedHeader, msgBody, connfd, pthread_self()) < 0)
-        {
-            continue;
-        }
 
-        printUserList();
+        // initialize copy of clients username
+        char userName[25];
         strncpy(userName, msgBody, sizeof(userName) - 1);
         userName[sizeof(userName) - 1] = '\0'; // Ensure null-termination
 
+        // initialize copy of current user's poll voting vector
         uint32_t userPollVotesVec = getPollVotesVec(userName);
 
-        do 
+        do // loop to handle clients requests
         {
-
+            // free previous MSG and obtain new MSG
             free(msgBody);
             msgBody = GetMessage(connfd, receivedHeader);
-            petrV_header responseHeader;
+            int pollIndex;
+            int optionIndex;
+            int votingRespnseType;
+            char *pollList;
 
+            // switch based on the type of MSG
             switch (receivedHeader->msg_type)
             {
                 case OK:
                 case LOGIN:
                 case PLIST:
 
-                        fprintf(logFile,"%s PLIST\n", userName);
+                        pollList = returnCombinedPollStrings();
                         responseHeader.msg_type = PLIST;
-                        char *pollList = returnCombinedPollStrings();
                         responseHeader.msg_len = strlen(pollList) + 1; // adjust this according to how you calculate length
                         wr_msg(connfd, &responseHeader, pollList);
-                        break;
+                        fprintf(logFile,"%s PLIST\n", userName);
+                    break;
 
 
                 case STATS:
@@ -76,42 +78,50 @@ void *workerThread(void *vargp)
                         break;
 
                 case VOTE:
-                    //receivedHeader->
-                    
-                    //userPollVotesVec
-                    // fprintf(logFile,"%s VOTE %d %d %d\n", userName, pollIndex, choiceNum, pollVotes);
-                    // responseHeader.msg_type = PLIST;
-                    // char *pollList = returnCombinedPollStrings();
-                    // responseHeader.msg_len = strlen(pollList) + 1; // adjust this according to how you calculate length
-                    // wr_msg(connfd, &responseHeader, pollList);
-                    break;
+            
+                    sscanf(msgBody, "%d %d", &pollIndex, &optionIndex);
+                    votingRespnseType = verifyUserVote(pollIndex, optionIndex, userPollVotesVec);
+                    printf("voting response type: %d\n", votingRespnseType);
+
+                        switch (votingRespnseType)
+                        {
+                            case 1: 
+                                    SendError(connfd, EPNOTFOUND);
+                                    break;
+                            case 2: 
+                                    SendError(connfd, ECNOTFOUND);
+                                    break;
+                            case 3:
+                                    SendError(connfd, EPDENIED);
+                                    break;
+                            case 4:
+                                    userPollVotesVec = markVote(pollIndex, userPollVotesVec);
+                                    updateUser(userName, 1,-1,userPollVotesVec);
+                                    updateCurrentStats(0,0,1);
+                                    pollArray[pollIndex].options[optionIndex].voteCnt++;
+                                    SendOK(connfd);
+                                    break;
+                        }
+
+                break;
 
                 case LOGOUT:
-                    // Assume updateUser is a function that marks the user as inactive.
-                        
-                        fprintf(logFile,"%s LOGOUT\n",userName);
-
-                        // include update for poll votes vector
-                        updateUser(userName,-1,-1,-1);
-                        
-                        // Create an OK message header
-                        petrV_header responseHeader;
-                        responseHeader.msg_len = 0;
-                        responseHeader.msg_type = OK;
-                        // Send the OK message back to the client
-                        wr_msg(connfd, &responseHeader, NULL);
-                            
-                    
+                        // mark user inactive and update votes
+                        updateUser(userName,-1,-1,userPollVotesVec);
+                        fprintf(logFile,"%s LOGOUT\n",userName);   
+                        SendOK(connfd);
                         break;
                 
                 default:
                     // Unrecognized message type. You might want to add some error handling here.
                     break;
             }
+
         } while (receivedHeader->msg_type != 0x2);
 
-        printf("no more server code to handle client\n");
+        printf("Finished processing current client.\n");
 
+        // free last MSG and close connection file to prepare for new client connection
         free(msgBody);
         close(connfd);
     }
@@ -122,7 +132,8 @@ void *workerThread(void *vargp)
 
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) 
+{
 
     int opt, listenfd;
     while ((opt = getopt(argc, argv, "h")) != -1) {
@@ -198,15 +209,13 @@ int main(int argc, char *argv[]) {
 
     printf("Server initialized with %d polls.\n", numOfPolls);
     printf("Currently listening on port %d.\n\n",port_number);
-// *************************************************************************************************************************************************
-// FINISHED SERVER INITIALIZATION
-// *************************************************************************************************************************************************
-   
+
    
     socklen_t clientlen;
     int connfd;
     struct sockaddr_in clientaddr;
     pthread_t tid;
+    mainThreadID = pthread_self();
     sbuf = malloc(sizeof(sbuf_t));
     if (!sbuf) 
     {
@@ -217,9 +226,7 @@ int main(int argc, char *argv[]) {
     int i;
     for(i = 0; i < maxNumOfThreads; i++)
         Pthread_create(&tid,NULL,workerThread,NULL);
-    //printf("%d worker threads have been created.\n", maxNumOfThreads);
-
-    //printf("Begin looping for new connections...\n");
+   
     while(1) {
 
         clientlen = sizeof(struct sockaddr_storage);
@@ -229,7 +236,7 @@ int main(int argc, char *argv[]) {
             if (errno == EINTR && sigint_received) 
             {
                 close(listenfd);
-                handle_SIGINT();
+                handle_SIGINT(connfd);
                 break;
             }
             else

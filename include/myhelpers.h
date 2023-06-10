@@ -22,7 +22,31 @@
 #include "sbuf.h"
 
 
-// function to get the message from the client
+
+void SendOK(int connfd)
+{
+    printf("Testing: sent okay.\n");
+    petrV_header responseHeader;  
+    responseHeader.msg_type = OK;
+    responseHeader.msg_len = 0;
+    if (wr_msg(connfd, &responseHeader, NULL) < 0)
+    {
+        perror("Sending failed\n");
+    }
+}
+
+void SendError(int connfd, enum msg_types responseEnum)
+{
+    printf("Testing: sent error.\n");
+    petrV_header responseHeader;  
+    responseHeader.msg_type = responseEnum;
+    responseHeader.msg_len = 0;
+    if (wr_msg(connfd, &responseHeader, NULL) < 0)
+    {
+        perror("Sending failed\n");
+    }
+}
+
 char* GetMessage(int socket_fd, petrV_header* h)
 {
     if(rd_msgheader(socket_fd, h) < 0)
@@ -68,47 +92,85 @@ int authorizeUser(petrV_header *receivedHeader, char * msgBody, int connfd, pthr
     switch(userExists(msgBody))
     {
         case 0: 
-            // VALID SYNTAX AND NEW USER
-            insertUser(msgBody,connfd,tid,0);
+            // CONNECTED
             fprintf(logFile,"CONNECTED %s\n",msgBody);
+            insertUser(msgBody,connfd,tid,0);
             updateCurrentStats(1,1,0);
-            receivedHeader->msg_type = 0x00;
-            receivedHeader->msg_len = 0; // No body content
+            SendOK(connfd);
             break;
 
         case 1: 
-            // user name exists and is inactive
-            updateUser(msgBody,connfd,tid,0);
+            // RECONNECTED
             fprintf(logFile,"RECONNECTED %s\n",msgBody);
+            updateUser(msgBody,connfd,tid,0);
             updateCurrentStats(1,1,0);
-            receivedHeader->msg_type = 0x00;
-            receivedHeader->msg_len = 0; // No body content
+            SendOK(connfd);
             break;
 
         case 2: 
-            // user name exists and active: ERROR
+            // ERROR
             fprintf(logFile,"REJECT %s\n",msgBody);
-            receivedHeader->msg_type = EUSRLGDIN;
-            receivedHeader->msg_len = 0; // No body content
-            if (wr_msg(connfd, receivedHeader, NULL) < 0)
-            {
-                printf("Sending failed\n");
-                free(msgBody);;
-            }
+            updateCurrentStats(1,0,0);
+            SendError(connfd, EUSRLGDIN);
             close(connfd);
             return -1;
         default: 
-            printf("USER Exists error\n");
+
+            break;
     }
 
-    if (wr_msg(connfd, receivedHeader, NULL) < 0) // Pass NULL for msgBody
-    {
-        printf("Sending failed\n");
-        free(msgBody);
-    }
 
     return 0;
+}
 
+void printBits(uint32_t num) {
+    int size = sizeof(uint32_t) * 8; // number of bits in type
+    for(int i = size-1; i >= 0; i--) 
+    {
+        int bit = (num >> i) & 1;
+        printf("%d", bit);
+    }
+    printf("\n");
+}
+
+bool checkVote(int pollIndex, uint32_t pollVoteVector) 
+{
+    printf("checking to see if poll %d was voted on: ", pollIndex);
+    printBits(pollVoteVector);
+    return ((1 << pollIndex) & pollVoteVector) != 0;
+}
+
+uint32_t markVote(int pollIndex, uint32_t pollVoteVector) 
+{
+    // Shift a 1 to the left by pollIndex bits, then OR with pollVoteVector.
+    // This will set the bit at pollIndex in pollVoteVector to 1.
+    printf("Marking poll #%d as voted!\n",pollIndex);
+
+    return pollVoteVector | (1 << pollIndex);
+}
+
+int verifyUserVote (const int pollIndex, const int optionIndex, uint32_t pollVoteVector)
+{
+    if (pollIndex > (numOfPolls - 1) || pollIndex < 0)
+        return 1;
+    printf("poll index was valid\n");
+    
+    P(&pollArrayMutex);
+    if (pollArray[pollIndex].options[optionIndex].text == NULL || optionIndex > 3)
+    {
+        V(&pollArrayMutex);
+        return 2;
+    }
+    V(&pollArrayMutex);
+    
+    printf("poll option index was valid\n");
+    
+
+    if (checkVote(pollIndex,pollVoteVector))
+        return 3;
+    printf("poll was not voted on before\n");
+
+    return 4;
 }
 
 
