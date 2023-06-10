@@ -94,6 +94,7 @@ int authorizeUser(petrV_header *receivedHeader, char * msgBody, int connfd, pthr
         case 0: 
             // CONNECTED
             fprintf(logFile,"CONNECTED %s\n",msgBody);
+            printf("CONNECTED %s\n",msgBody);
             insertUser(msgBody,connfd,tid,0);
             updateCurrentStats(1,1,0);
             SendOK(connfd);
@@ -102,7 +103,8 @@ int authorizeUser(petrV_header *receivedHeader, char * msgBody, int connfd, pthr
         case 1: 
             // RECONNECTED
             fprintf(logFile,"RECONNECTED %s\n",msgBody);
-            updateUser(msgBody,connfd,tid,0);
+            printf("RECONNECTED %s\n",msgBody);
+            updateUser(msgBody,connfd,tid,getPollVotesVec(msgBody));
             updateCurrentStats(1,1,0);
             SendOK(connfd);
             break;
@@ -162,7 +164,7 @@ int verifyUserVote (const int pollIndex, const int optionIndex, uint32_t pollVot
         return 2;
     }
     V(&pollArrayMutex);
-    
+
     printf("poll option index was valid\n");
     
 

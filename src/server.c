@@ -98,12 +98,14 @@ void *workerThread(void *vargp)
                                     userPollVotesVec = markVote(pollIndex, userPollVotesVec);
                                     updateUser(userName, 1,-1,userPollVotesVec);
                                     updateCurrentStats(0,0,1);
+                                    P(&pollArrayMutex);
                                     pollArray[pollIndex].options[optionIndex].voteCnt++;
+                                    V(&pollArrayMutex);
                                     SendOK(connfd);
                                     break;
                         }
 
-                break;
+                    break;
 
                 case LOGOUT:
                         // mark user inactive and update votes
