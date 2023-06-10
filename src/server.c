@@ -24,8 +24,7 @@ void *workerThread(void *vargp)
             close(connfd);
             pthread_exit(NULL);
         }
-        //printf("\tconnfd from the buff remove: %d\n", connfd);
-        //printf("\tWorker thread began processing pending client connection from the buffer...\n");
+ 
         char* msgBody = GetMessage(connfd, receivedHeader);
 
         if(msgBody == NULL)
@@ -38,17 +37,19 @@ void *workerThread(void *vargp)
         {
             continue;
         }
-        
 
         printUserList();
         strncpy(userName, msgBody, sizeof(userName) - 1);
         userName[sizeof(userName) - 1] = '\0'; // Ensure null-termination
+
+        uint32_t userPollVotesVec = getPollVotesVec(userName);
 
         do 
         {
 
             free(msgBody);
             msgBody = GetMessage(connfd, receivedHeader);
+            petrV_header responseHeader;
 
             switch (receivedHeader->msg_type)
             {
@@ -57,24 +58,50 @@ void *workerThread(void *vargp)
                 case PLIST:
 
                         fprintf(logFile,"%s PLIST\n", userName);
+                        responseHeader.msg_type = PLIST;
+                        char *pollList = returnCombinedPollStrings();
+                        responseHeader.msg_len = strlen(pollList) + 1; // adjust this according to how you calculate length
+                        wr_msg(connfd, &responseHeader, pollList);
+                        break;
 
 
                 case STATS:
+
+                        // fprintf(logFile,"%s STATS %d\n", userName, userPollVotesVec);
+                        // responseHeader.msg_type = PLIST;
+                        // responseHeader.msg_len = 0;
+                        
+                        // // Send the OK message back to the client
+                        // wr_msg(connfd, &responseHeader, NULL);
+                        break;
+
                 case VOTE:
-                    // Handle these message types as necessary
+                    //receivedHeader->
+                    
+                    //userPollVotesVec
+                    // fprintf(logFile,"%s VOTE %d %d %d\n", userName, pollIndex, choiceNum, pollVotes);
+                    // responseHeader.msg_type = PLIST;
+                    // char *pollList = returnCombinedPollStrings();
+                    // responseHeader.msg_len = strlen(pollList) + 1; // adjust this according to how you calculate length
+                    // wr_msg(connfd, &responseHeader, pollList);
                     break;
+
                 case LOGOUT:
                     // Assume updateUser is a function that marks the user as inactive.
-                        fprintf(logFile,"%s LOGOUT\n",msgBody);
+                        
+                        fprintf(logFile,"%s LOGOUT\n",userName);
+
+                        // include update for poll votes vector
                         updateUser(userName,-1,-1,-1);
+                        
                         // Create an OK message header
                         petrV_header responseHeader;
                         responseHeader.msg_len = 0;
                         responseHeader.msg_type = OK;
                         // Send the OK message back to the client
-                        if (wr_msg(connfd, &responseHeader, NULL) < 0) {
-                            // Handle the error - failed to send message
-                        }
+                        wr_msg(connfd, &responseHeader, NULL);
+                            
+                    
                         break;
                 
                 default:

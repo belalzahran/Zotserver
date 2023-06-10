@@ -25,116 +25,157 @@ poll_t pollArray[32]; // Global variable
                       // Maximum of 32 polls on the server.
 
 
-
-void getQuestion(char *buffer, char* question, int *numOfChoices)
-{
-    int i;
-
-    for(i = 0; i < strlen(buffer);i++)
-    {
-        if(buffer[i] == ';')
-            break;
-    }
-    
-    strncpy(question, buffer, i);
-    question[i] = '\0';
-    *numOfChoices = buffer[i+1] - '0';
-     
-}
-
-
-void getChoiceStringAndVoteCnt(char *buffer, int numOfChoices, int choiceNum, char* choiceString, int *voteCount) {
-    // strtok modifies the input string, so we copy buffer to a temporary string
-    char temp[strlen(buffer) + 1];
-    strcpy(temp, buffer);
-
-    // skip over the question
-    strtok(temp, ";");
-    // skip over the number of choices
-    strtok(NULL, ";");
-
-    char *token = NULL;
-    for (int i = 0; i <= choiceNum; i++) {
-        token = strtok(NULL, ";");
-        if (token == NULL) {
-            // Not enough choices in the string
-            printf("Error: Not enough choices in the string.\n");
-            return;
+void print_poll_array() {
+    P(&pollArrayMutex);
+    for (int i = 0; i < 32; i++) {
+        if (pollArray[i].question != NULL) {
+            printf("%s;", pollArray[i].question);
+            for (int j = 0; j < 4; j++) {
+                if (pollArray[i].options[j].text != NULL) {
+                    printf("%d;%s", pollArray[i].options[j].voteCnt, pollArray[i].options[j].text);
+                    if (j != 3 && pollArray[i].options[j+1].text != NULL) {
+                        printf(",");
+                    }
+                }
+            }
+            printf("\n");
         }
     }
-
-    // split the choice into choiceString and voteCount
-    char *commaPos = strchr(token, ',');
-    if (commaPos == NULL) {
-        // Malformed choice
-        printf("Error: Malformed choice.\n");
-        return;
+    V(&pollArrayMutex);
+}
+char* str_split(char* a_str, const char a_delim){
+    static char* input_string;
+    if(a_str != NULL)
+        input_string = a_str;
+        
+    if(input_string == NULL)
+        return NULL;
+        
+    char* part = strchr(input_string, a_delim);
+    char* ret_str = input_string;
+    
+    if(part != NULL){
+        *part = '\0';
+        input_string = part+1;
+    }else{
+        input_string = NULL;
     }
-
-    // copy the part before the comma to choiceString
-    strncpy(choiceString, token, commaPos - token);
-    // add the null terminator manually
-    choiceString[commaPos - token] = '\0';
-
-    // convert the part after the comma to an integer
-    *voteCount = atoi(commaPos + 1);
+    
+    return ret_str;
 }
 
-
-
-void readInPollInfo(FILE *pollFile)
-{
-
+void readInPollInfo(FILE *pollFile){
     char buffer[1024];
     int pollArrayIndex = 0;
-    int numOfChoices,choiceNum,voteCount = 0;
 
-    
+    while(fgets(buffer, sizeof(buffer), pollFile)){
+        buffer[strcspn(buffer, "\n")] = 0;  // remove the newline
 
-    while((fgets(buffer, 1024, pollFile)))
-    {
-        //printf("string: %s\n",buffer);
+        // Allocate memory for the question
+        char* question = (char*) malloc(100 * sizeof(char));
 
-        buffer[strcspn(buffer, "\n")] = '\0';
-        char *question = malloc(sizeof(char) * 100);
-        getQuestion(buffer, question, &numOfChoices);
+        // Get the question and the number of choices
+        char* temp = str_split(buffer, ';');
+        strcpy(question, temp);
+
+        int numOfChoices = atoi(str_split(NULL, ';'));
+
         pollArray[pollArrayIndex].question = question;
 
-        // printf("The question: %s\n",question);
-        // printf("The num Of choices: %d\n",numOfChoices);
+        // Load the choices
+        for(int i = 0; i < numOfChoices; i++){
+            // Allocate memory for the choice text
+            char* choiceText = (char*) malloc(50 * sizeof(char));
 
-        for(int i = 0; i < 4; i++) 
-        {
-            if (i >= numOfChoices) {
-                pollArray[pollArrayIndex].options[i].text = NULL;
-                continue;
-            }
-            else
-            {
-                char *choiceString = malloc(sizeof(char) * 50);
-                int voteCount;
-                getChoiceStringAndVoteCnt(buffer, numOfChoices, i, choiceString, &voteCount);
-                // printf("choice string is: %s, and voteCount is: %d\n", choiceString,voteCount);
+            temp = str_split(NULL, ';');
+            char* voteCountStr = strchr(temp, ',');
 
-                pollArray[pollArrayIndex].options[i].text = choiceString;
-                pollArray[pollArrayIndex].options[i].voteCnt = voteCount;
-
-                free(choiceString);
+            // Split the choice text and the vote count
+            if(voteCountStr != NULL){
+                *voteCountStr = '\0';
+                voteCountStr++;
             }
 
-            
+            // Copy the choice text and vote count
+            strcpy(choiceText, temp);
+            int voteCount = atoi(voteCountStr);
+
+            pollArray[pollArrayIndex].options[i].text = choiceText;
+            pollArray[pollArrayIndex].options[i].voteCnt = voteCount;
+        }
+
+        // Mark unused choices
+        for(int i = numOfChoices; i < 4; i++){
+            pollArray[pollArrayIndex].options[i].text = NULL;
         }
 
         pollArrayIndex++;
-        free(question);
-
     }
-    numOfPolls = pollArrayIndex;
 
+    numOfPolls = pollArrayIndex;
 }
 
 
 
+char* getPollString(int index){
+    if(index >= numOfPolls)
+        return NULL;
+
+    char *poll = (char *) malloc(2000 * sizeof(char)); 
+    if(poll == NULL){
+        //Handle error
+    }
+    
+    sprintf(poll, "Poll %d - %s - ", index, pollArray[index].question);
+    
+    int optionNum = 0;
+    while(pollArray[index].options[optionNum].text != NULL && optionNum < 4){
+        char temp[100]; // temporary string for each option, adjust size as needed
+        sprintf(temp, "%d:%s, ", optionNum,pollArray[index].options[optionNum].text);
+        strcat(poll, temp);
+        optionNum++;
+    }   
+
+    // Replace last ";" with "\0" to mark end of string
+    poll[strlen(poll)-2] = '\0';
+    
+    return poll;
+}
+
+char* returnCombinedPollStrings() 
+{
+    P(&pollArrayMutex);
+    char *combinedPolls = (char *) malloc(10000 * sizeof(char));
+    if(combinedPolls == NULL) {
+        // Handle error
+    }
+    combinedPolls[0] = '\0'; // make it an empty string
+
+    int index = 0;
+    while(index < numOfPolls && index < 32)
+    {
+        char *pollString = getPollString(index);
+        if (pollString == NULL) {
+            continue;  // Skip if pollString is NULL
+        }
+
+        // Check if adding the new pollString would overflow the buffer
+        if (strlen(combinedPolls) + strlen(pollString) + 2 > 10000) {  // +2 for newline and null terminator
+            // Handle overflow
+            free(pollString);
+            break;
+        }
+        strcat(combinedPolls, pollString);
+        strcat(combinedPolls, "\n");  // Add newline between polls
+        free(pollString);
+        index++;
+    }
+    combinedPolls[strlen(combinedPolls)-1] = '\0';  // Replace last newline with null terminator
+
+    V(&pollArrayMutex);
+
+    return combinedPolls;
+}
 
 #endif
 

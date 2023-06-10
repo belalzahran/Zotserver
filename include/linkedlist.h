@@ -160,6 +160,45 @@ void printUserList()
 }
 
 
+uint32_t getPollVotesVec(char* keyName) 
+{
+    P(&userMutex);
+    userListReadCount++;
+
+    if(userListReadCount == 1)
+        P(&userMutexWrite);
+
+    V(&userMutex);
+    
+    user_t* ptr = userListHead;
+    while (ptr != NULL) 
+    {
+        if (strcmp(ptr->username, keyName) == 0)
+        { // If the user exists
+
+            P(&userMutex);
+            userListReadCount--;
+
+            if(userListReadCount == 0)
+                V(&userMutexWrite);
+
+            V(&userMutex);
+
+            return ptr->pollVotes;
+        }
+        ptr = ptr->next;
+    }
+
+    P(&userMutex);
+    userListReadCount--;
+
+    if(userListReadCount == 0)
+        V(&userMutexWrite);
+
+    V(&userMutex);
+
+    return 0; // If the user does not exist
+}
 
 #endif
 
